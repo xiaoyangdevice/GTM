@@ -17,9 +17,7 @@ from mamba_ssm import Mamba
 
 warnings.filterwarnings('ignore')
 
-# ==============================================================================
-# 全局配置
-# ==============================================================================
+
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 VOCAB_SIZE = 30522
 HIDDEN_DIM = 768
@@ -97,12 +95,7 @@ class MambaLayer(nn.Module):
 
 
 class BiMambaLayer(nn.Module):
-    """
-    双向 Mamba 层（关键修复！）
     
-    分类任务需要双向信息聚合，特别是CLS token需要看到整个序列。
-    使用前向和后向两个Mamba，然后合并。
-    """
     
     def __init__(self, d_model, d_state=16, d_conv=4, expand=2, dropout=0.1):
         super().__init__()
@@ -134,14 +127,7 @@ class BiMambaLayer(nn.Module):
 
 
 class GatedTransMambaBlock(nn.Module):
-    """
-    门控混合模块（修复版）
-    
-    关键改进：
-    1. 使用双向Mamba（BiMambaLayer）替代单向Mamba
-    2. 调整层级门控偏置：分类任务中整体偏向Transformer
-    3. 添加CLS token位置的特殊门控处理
-    """
+   
     
     def __init__(self, layer_idx=0, dropout=0.1, use_bidirectional=True):
         super().__init__()
@@ -183,10 +169,7 @@ class GatedTransMambaBlock(nn.Module):
         # 可学习的残差缩放
         self.residual_scale = nn.Parameter(torch.ones(1) * 0.5)
         
-        # 层级门控偏置（修复：分类任务整体偏向Transformer）
-        # 浅层：强偏向Transformer（bias=0.3）
-        # 深层：适度偏向Transformer（bias=0.1）
-        # 这样CLS token在所有层都能获得双向信息
+       
         self.layer_bias = nn.Parameter(torch.tensor([0.3 - 0.03 * layer_idx]))
         
         # 最终归一化
@@ -221,14 +204,7 @@ class GatedTransMambaBlock(nn.Module):
 
 
 class GatedTransMamba(nn.Module):
-    """GatedTransMamba（修复版）
-    
-    分类任务特化：
-    1. 使用双向Mamba
-    2. 门控偏置调整
-    3. 支持多种池化方式：CLS、mean、max、concat
-    """
-    
+   
     # 支持的池化方式
     POOLING_METHODS = ['cls', 'mean', 'max', 'concat']
     
@@ -379,18 +355,7 @@ class AlternateTransMamba(nn.Module):
 
 
 class TransMambaBlock(nn.Module):
-    """
-    TransMamba：序列级别分段混合（分类任务版本）
-    
-    核心思想：
-    1. 序列前段使用 Transformer（双向注意力，理解全局上下文）
-    2. 序列后段使用 Mamba（双向，高效处理）
-    3. 分段点 trans_point 可以根据层深度动态调整
-    
-    与门控混合的区别：
-    - 门控混合：每个 token 独立决定使用 Transformer 还是 Mamba
-    - 序列分段：整个序列的前段/后段分别使用不同架构
-    """
+   
     
     def __init__(self, layer_idx=0, num_layers=NUM_LAYERS, trans_point=64, dropout=0.1, use_bidirectional=True):
         super().__init__()
@@ -462,15 +427,7 @@ class TransMambaBlock(nn.Module):
 
 
 class TransMamba(nn.Module):
-    """
-    TransMamba for Classification：序列级别分段混合
-    
-    特点：
-    1. 浅层使用较大的 trans_point（更多 Transformer）
-    2. 深层使用较小的 trans_point（更多 Mamba）
-    3. 使用 CLS token 进行分类
-    4. 双向信息流，适合分类任务
-    """
+  
     
     def __init__(self, num_classes=2, num_layers=NUM_LAYERS, trans_points=None, dropout=0.1, use_bidirectional=True):
         super().__init__()
@@ -538,7 +495,7 @@ class TransMamba(nn.Module):
 
 
 class HyenaLayer(nn.Module):
-    """Hyena 风格的 SSM 层"""
+   
     
     def __init__(self, d_model, dropout=0.1):
         super().__init__()
@@ -559,7 +516,7 @@ class HyenaLayer(nn.Module):
 
 
 class Hyena(nn.Module):
-    """Hyena 风格 SSM"""
+   
     
     def __init__(self, num_classes=2, dropout=0.1):
         super().__init__()
@@ -601,7 +558,7 @@ class Hyena(nn.Module):
 
 
 class LSTM_Attn(nn.Module):
-    """LSTM + Attention"""
+   
     
     def __init__(self, num_classes=2, dropout=0.1):
         super().__init__()
@@ -751,7 +708,7 @@ class PureMamba(nn.Module):
 
 
 class RetentionLayer(nn.Module):
-    """RetNet风格的保留机制层"""
+    
 
     def __init__(self, d_model, dropout=0.1):
         super().__init__()
@@ -825,7 +782,7 @@ class RetFormer(nn.Module):
 
 
 class GatedMLPLayer(nn.Module):
-    """门控MLP层：Pre-Norm + 门控 + 残差 + 空间门控"""
+    
 
     def __init__(self, d_model, dropout=0.1):
         super().__init__()
@@ -851,8 +808,7 @@ class GatedMLPLayer(nn.Module):
         g = torch.sigmoid(self.gate(x))  # [B, T, D*4]
         out = h * g  # [B, T, D*4]
         
-        # 空间门控：沿序列维度进行交互
-        # 使用 softmax 在序列维度上归一化，实现位置间的信息交换
+       
         spatial_logits = self.spatial_proj(out)  # [B, T, D*4]
         spatial_weights = torch.softmax(spatial_logits, dim=1)  # [B, T, D*4]
         out = out * spatial_weights  # [B, T, D*4]
@@ -909,19 +865,7 @@ class GatedMLP(nn.Module):
 # ==============================================================================
 
 class RWKVLayer(nn.Module):
-    """
-    RWKV 层 - 线性注意力架构（分类任务双向版本）
-    
-    RWKV 结合了 RNN 和 Transformer 的优点：
-    1. 训练时可并行（类似 Transformer）
-    2. 推理时可递归（类似 RNN，效率高）
-    3. 分类任务使用双向版本，CLS token 可以看到整个序列
-    
-    核心公式（RWKV 论文）：
-    - WKV(t) = Σ_i w^{t-i} * exp(k_i) * v_i / Σ_i w^{t-i} * exp(k_i)
-    - 使用 exp(k) 确保 key 为正数，避免除零
-    - 双向版本：使用可学习的位置对来编码相对位置关系
-    """
+   
     
     def __init__(self, d_model, dropout=0.1, bidirectional=True):
         super().__init__()
@@ -960,11 +904,7 @@ class RWKVLayer(nn.Module):
         nn.init.zeros_(self.output_proj.bias)
     
     def forward(self, x):
-        """
-        RWKV 的双向实现（用于分类任务）
-        
-        使用简化的线性注意力形式，避免数值稳定性问题
-        """
+       
         residual = x
         x = self.norm(x)
         
@@ -1022,11 +962,7 @@ class RWKVLayer(nn.Module):
 
 
 class RWKV(nn.Module):
-    """
-    RWKV 模型（分类任务版本）
-    
-    纯 RWKV 层堆叠，用于分类任务
-    """
+   
     
     def __init__(self, num_classes=2, dropout=0.1, bidirectional=True):
         super().__init__()
@@ -1069,23 +1005,9 @@ class RWKV(nn.Module):
         return self.head(self.norm(x[:, 0]))
 
 
-# ==============================================================================
-# RetNet 模型（分类任务版本 - 双向）
-# ==============================================================================
 
 class RetNetLayer(nn.Module):
-    """
-    RetNet 的 Retention 层（分类任务双向版本）
-    
-    Retention 机制是一种替代注意力的方法：
-    1. 支持并行训练（类似 Transformer）
-    2. 支持递归推理（类似 RNN）
-    3. 分类任务使用双向版本
-    
-    核心公式（数值稳定版）：
-    - Retention(Q, K, V) = softmax(Q @ K^T / sqrt(d) + decay_bias) @ V
-    - 使用 softmax 归一化，避免数值问题
-    """
+   
     
     def __init__(self, d_model, dropout=0.1, bidirectional=True):
         super().__init__()
@@ -1226,20 +1148,7 @@ def count_parameters(model):
 
 
 def compute_flops(model, input_seq_len=128, batch_size=1, device=None):
-    """
-    计算模型的 FLOPs（浮点运算次数）
-    
-    使用 thop 库（如果可用）或手动估算
-    
-    Args:
-        model: 模型实例
-        input_seq_len: 输入序列长度
-        batch_size: 批次大小
-        device: 设备
-    
-    Returns:
-        FLOPs 数量（单位：GFLOPs）
-    """
+   
     if device is None:
         device = DEVICE
     
@@ -1263,19 +1172,7 @@ def compute_flops(model, input_seq_len=128, batch_size=1, device=None):
 
 
 def estimate_flops_manual(model, input_seq_len=128, batch_size=1):
-    """
-    手动估算模型的 FLOPs
     
-    基于模型参数和架构进行估算
-    
-    Args:
-        model: 模型实例
-        input_seq_len: 输入序列长度
-        batch_size: 批次大小
-    
-    Returns:
-        估算的 FLOPs（单位：GFLOPs）
-    """
     # 获取模型信息
     params = count_parameters(model)
     
